@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitChain | Decentralized Expense Splitting</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js for Interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        deepBlack: '#0D0D0D',
+                        darkRed: '#8B0000',
+                        crimson: '#B11226',
+                        crimsonLight: '#FF2E43',
+                        glass: 'rgba(255, 255, 255, 0.03)',
+                        glassBorder: 'rgba(255, 255, 255, 0.08)',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.4s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0D0D0D;
+            color: #FFFFFF;
+            overflow-x: hidden;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D0D0D; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #B11226; 
+        }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(177, 18, 38, 0.5);
+            box-shadow: 0 0 15px rgba(177, 18, 38, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .crimson-glow {
+            box-shadow: 0 0 20px rgba(177, 18, 38, 0.4);
+        }
+
+        /* Gradient Text */
+        .text-gradient {
+            background: linear-gradient(to right, #FFFFFF, #B3B3B3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .text-gradient-red {
+            background: linear-gradient(to right, #B11226, #FF4D5E);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body x-data="appData()" class="antialiased min-h-screen flex flex-col">
+
+    <!-- Notification Toast -->
+    <div x-show="notification.show" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-300"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2"
+         class="fixed top-6 right-6 z-50 glass-panel px-6 py-4 rounded-xl flex items-center gap-4 border-l-4 border-crimson">
+        <div class="text-crimson text-xl"><i class="fa-solid fa-check-circle"></i></div>
+        <div>
+            <h4 class="font-semibold text-white" x-text="notification.title"></h4>
+            <p class="text-sm text-gray-400" x-text="notification.message"></p>
+        </div>
+    </div>
+
+    <!-- Main Navigation (Conditional) -->
+    <nav x-show="walletConnected" 
+         x-transition:enter="transition ease-out duration-500"
+         x-transition:enter-start="opacity-0 -translate-y-4"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         class="fixed top-0 left-0 w-full z-40 glass-panel border-b border-white/5 h-20 flex items-center justify-between px-6 lg:px-12">
+        
+        <!-- Logo -->
+        <div class="flex items-center gap-3 cursor-pointer" @click="page = 'dashboard'">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-crimson to-darkRed flex items-center justify-center crimson-glow">
+                <span class="font-bold text-xl text-white">S</span>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-wide text-white">SplitChain</h1>
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest">Trustless. Transparent.</p>
+            </div>
+        </div>
+
+        <!-- Wallet Info -->
+        <div class="flex items-center gap-6">
+            <div class="hidden md:flex flex-col items-end">
+                <span class="text-xs text-gray-400">Algorand Balance</span>
+                <span class="font-mono text-crimson font-bold">245.8 ALGO</span>
+            </div>
+            <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span class="text-sm font-mono text-gray-300">...3X8K</span>
+                <button @click="walletConnected = false; page = 'landing'" class="text-gray-500 hover:text-white transition-colors">
+                    <i class="fa-solid fa-power-off"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- CONTENT AREA -->
+    <main class="flex-grow pt-0">
+        
+        <!-- LANDING PAGE -->
+        <div x-show="!walletConnected" 
+             x-transition.opacity.duration.700ms
+             class="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+            
+            <!-- Background Gradients -->
+            <div class="absolute top-0 left-1/4 w-96 h-96 bg-crimson/20 rounded-full blur-[120px] -z-10 animate-pulse-slow"></div>
+            <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-darkRed/20 rounded-full blur-[120px] -z-10"></div>
+
+            <!-- Hero Content -->
+            <div class="text-center max-w-4xl px-6 z-10">
+                <div class="inline-block mb-6 px-4 py-1.5 rounded-full border border-crimson/30 bg-crimson/10 backdrop-blur-sm">
+                    <span class="text-crimson text-xs font-semibold tracking-wider uppercase">Powered by Algorand</span>
+                </div>
+                
+                <h1 class="text-5xl md:text-7xl font-bold mb-6 leading-tight text-gradient">
+                    Split Expenses. <br>
+                    <span class="text-gradient-red">Settle Instantly.</span>
+                </h1>
+                
+                <p class="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+                    The decentralized standard for group expenses. Create groups, track debts, and settle balances directly on-chain with zero trust required.
+                </p>
+
+                <div class="flex flex-col md:flex-row gap-4 justify-center items-center">
+                    <button @click="connectWallet()" 
+                            class="group relative px-8 py-4 bg-gradient-to-r from-crimson to-darkRed rounded-lg font-semibold text-white shadow-lg shadow-crimson/25 hover:shadow-crimson/40 transition-all duration-300 overflow-hidden">
+                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        <span class="relative flex items-center gap-2">
+                            Connect Wallet <i class="fa-solid fa-wallet"></i>
+                        </span>
+                    </button>
+                    
+                    <button @click="scrollToFeatures()" class="px-8 py-4 rounded-lg font-medium text-gray-300 hover:text-white transition-colors border border-white/10 hover:border-white/20 bg-white/5 backdrop-blur-sm">
+                        Learn More
+                    </button>
+                </div>
+            </div>
+
+            <!-- Features Section -->
+            <div id="features" class="mt-32 w-full max-w-6xl px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <template x-for="feature in features" :key="feature.title">
+                    <div class="glass-card p-8 rounded-2xl relative group overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                            <i :class="feature.icon" class="text-6xl text-crimson"></i>
+                        </div>
+                        <div class="w-12 h-12 rounded-lg bg-crimson/10 flex items-center justify-center text-crimson mb-6 text-xl">
+                            <i :class="feature.icon"></i>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-3 text-white" x-text="feature.title"></h3>
+                        <p class="text-gray-400 text-sm leading-relaxed" x-text="feature.desc"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- DASHBOARD -->
+        <div x-show="walletConnected" 
+             x-transition.opacity.duration.500ms
+             class="flex min-h-screen pt-20">
+            
+            <!-- Sidebar -->
+            <aside class="w-20 lg:w-64 fixed h-full border-r border-white/5 glass-panel flex flex-col justify-between py-8 z-30 transition-all duration-300">
+                <div class="flex flex-col gap-2 px-4">
+                    <button @click="page = 'dashboard'" :class="page === 'dashboard' ? 'bg-crimson/10 text-crimson border-r-2 border-crimson' : 'text-gray-400 hover:text-white'" class="flex items-center gap-4 p-4 rounded-r-lg transition-all">
+                        <i class="fa-solid fa-chart-pie w-6 text-center"></i>
+                        <span class="hidden lg:block font-medium">Overview</span>
+                    </button>
+                    <button @click="page = 'groups'" :class="page === 'groups' ? 'bg-crimson/10 text-crimson border-r-2 border-crimson' : 'text-gray-400 hover:text-white'" class="flex items-center gap-4 p-4 rounded-r-lg transition-all">
+                        <i class="fa-solid fa-users w-6 text-center"></i>
+                        <span class="hidden lg:block font-medium">My Groups</span>
+                    </button>
+                    <button @click="page = 'settlements'" :class="page === 'settlements' ? 'bg-crimson/10 text-crimson border-r-2 border-crimson' : 'text-gray-400 hover:text-white'" class="flex items-center gap-4 p-4 rounded-r-lg transition-all">
+                        <i class="fa-solid fa-hand-holding-dollar w-6 text-center"></i>
+                        <span class="hidden lg:block font-medium">Settlements</span>
+                    </button>
+                </div>
+                
+                <div class="px-4">
+                    <button @click="openModal('createGroup')" class="w-full py-3 bg-white/5 hover:bg-crimson hover:text-white text-crimson rounded-lg transition-all duration-300 font-medium text-sm flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden lg:inline">New Group</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content Panel -->
+            <div class="flex-grow lg:ml-64 p-6 lg:p-12 max-w-7xl mx-auto w-full">
+                
+                <!-- Dashboard View -->
+                <div x-show="page === 'dashboard'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+                    <header class="flex justify-between items-end mb-10">
+                        <div>
+                            <h2 class="text-3xl font-bold text-white mb-2">Financial Overview</h2>
+                            <p class="text-gray-400">Welcome back, Deepak.</p>
+                        </div>
+                        <button @click="openModal('addExpense')" class="bg-crimson hover:bg-red-700 text-white px-6 py-3 rounded-lg shadow-lg shadow-crimson/20 transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Add Expense
+                        </button>
+                    </header>
+
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                        <!-- Card 1 -->
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden">
+                            <div class="absolute -right-6 -top-6 w-24 h-24 bg-crimson/10 rounded-full blur-2xl"></div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Total Owed to You</p>
+                            <h3 class="text-3xl font-bold text-white">14.5 ALGO</h3>
+                            <span class="text-xs text-green-400 mt-2 flex items-center gap-1"><i class="fa-solid fa-arrow-trend-up"></i> +2 this week</span>
+                        </div>
+                        <!-- Card 2 -->
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden">
+                            <div class="absolute -right-6 -top-6 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl"></div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Total You Owe</p>
+                            <h3 class="text-3xl font-bold text-white">2.5 ALGO</h3>
+                            <span class="text-xs text-gray-500 mt-2">Across 2 groups</span>
+                        </div>
+                        <!-- Card 3 -->
+                        <div class="glass-card p-6 rounded-2xl relative overflow-hidden border-crimson/30">
+                            <div class="absolute -right-6 -top-6 w-24 h-24 bg-crimson/20 rounded-full blur-2xl"></div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Net Balance</p>
+                            <h3 class="text-3xl font-bold text-crimson">+12.0 ALGO</h3>
+                            <span class="text-xs text-gray-500 mt-2">Positive cashflow</span>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity & Chart -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Chart Area (Visual Simulation) -->
+                        <div class="lg:col-span-2 glass-card p-6 rounded-2xl">
+                            <h3 class="text-lg font-semibold mb-6 text-white">Group Balances</h3>
+                            <div class="h-64 flex items-end justify-between gap-4 px-4">
+                                <!-- Mock Bars -->
+                                <template x-for="bar in [40, 70, 30, 90, 50]" :key="bar">
+                                    <div class="w-full bg-white/5 rounded-t-lg relative group cursor-pointer hover:bg-crimson/20 transition-colors" :style="`height: ${bar}%`">
+                                        <div class="absolute bottom-0 w-full bg-gradient-to-t from-crimson/50 to-transparent h-full opacity-20 group-hover:opacity-40 transition-opacity"></div>
+                                        <div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                            <span x-text="bar + ' ALGO'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="flex justify-between mt-4 text-xs text-gray-500 uppercase tracking-wider">
+                                <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span>
+                            </div>
+                        </div>
+
+                        <!-- Activity Feed -->
+                        <div class="glass-card p-6 rounded-2xl">
+                            <h3 class="text-lg font-semibold mb-6 text-white">Recent Activity</h3>
+                            <div class="space-y-6">
+                                <template x-for="activity in activities" :key="activity.id">
+                                    <div class="flex items-start gap-4">
+                                        <div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center shrink-0" :class="activity.type === 'expense' ? 'text-crimson' : 'text-blue-400'">
+                                            <i :class="activity.type === 'expense' ? 'fa-solid fa-receipt' : 'fa-solid fa-arrow-right-arrow-left'"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm text-white font-medium" x-text="activity.desc"></p>
+                                            <p class="text-xs text-gray-500 mt-1" x-text="activity.time"></p>
+                                        </div>
+                                        <div class="ml-auto text-sm font-mono" :class="activity.amount > 0 ? 'text-green-400' : 'text-gray-400'">
+                                            <span x-text="(activity.amount > 0 ? '+' : '') + activity.amount + ' ALGO'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Groups View -->
+                <div x-show="page === 'groups'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+                    <h2 class="text-3xl font-bold text-white mb-8">My Groups</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <template x-for="group in groups" :key="group.id">
+                            <div class="glass-card p-6 rounded-2xl flex flex-col h-full">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center text-xl font-bold text-white" x-text="group.name.charAt(0)"></div>
+                                    <span class="text-xs bg-white/10 px-2 py-1 rounded text-gray-300" x-text="group.members.length + ' Members'"></span>
+                                </div>
+                                <h3 class="text-xl font-bold text-white mb-1" x-text="group.name"></h3>
+                                <p class="text-sm text-gray-500 mb-6">Created on-chain</p>
+                                
+                                <div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-center">
+                                    <span class="text-sm text-gray-400">Balance</span>
+                                    <span class="text-sm font-mono text-white">0.00 ALGO</span>
+                                </div>
+                                <button class="mt-4 w-full py-2 bg-white/5 hover:bg-white/10 rounded text-sm text-white transition-colors">View Details</button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Settlements View -->
+                <div x-show="page === 'settlements'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+                    <h2 class="text-3xl font-bold text-white mb-8">Settle Up</h2>
+                    <div class="glass-card rounded-2xl overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-white/5 text-gray-400 text-xs uppercase">
+                                <tr>
+                                    <th class="px-6 py-4 font-medium">Debtor</th>
+                                    <th class="px-6 py-4 font-medium">Creditor</th>
+                                    <th class="px-6 py-4 font-medium">Amount</th>
+                                    <th class="px-6 py-4 font-medium text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5">
+                                <tr class="hover:bg-white/5 transition-colors">
+                                    <td class="px-6 py-4 text-white">Deepak</td>
+                                    <td class="px-6 py-4 text-white">Rahul</td>
+                                    <td class="px-6 py-4 text-crimson font-mono font-bold">2.5 ALGO</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <button @click="simulatePayment('Rahul', 2.5)" class="px-4 py-2 bg-crimson hover:bg-red-700 text-white text-sm rounded shadow-lg shadow-crimson/20 transition-all">
+                                            Pay Now
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr class="hover:bg-white/5 transition-colors">
+                                    <td class="px-6 py-4 text-white">Sarah</td>
+                                    <td class="px-6 py-4 text-white">You</td>
+                                    <td class="px-6 py-4 text-green-400 font-mono font-bold">5.0 ALGO</td>
+                                    <td class="px-6 py-4 text-right">
+                                        <span class="text-xs text-gray-500">Waiting for payment</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODALS -->
+
+    <!-- Create Group Modal -->
+    <div x-show="modals.createGroup" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" x-transition.opacity>
+        <div class="glass-panel w-full max-w-md rounded-2xl p-8 relative" @click.away="modals.createGroup = false">
+            <button @click="modals.createGroup = false" class="absolute top-4 right-4 text-gray-500 hover:text-white"><i class="fa-solid fa-times"></i></button>
+            
+            <h3 class="text-2xl font-bold text-white mb-6">Create New Group</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Group Name</label>
+                    <input type="text" placeholder="e.g. Goa Trip 2024" class="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-crimson focus:outline-none transition-colors">
+                </div>
+                
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Add Participants (Algo Address)</label>
+                    <div class="flex gap-2">
+                        <input type="text" placeholder="ALGO..." class="flex-grow bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-crimson focus:outline-none transition-colors">
+                        <button class="bg-white/10 hover:bg-white/20 px-4 rounded-lg text-white transition-colors"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <span class="px-3 py-1 bg-crimson/20 text-crimson text-xs rounded-full border border-crimson/30 flex items-center gap-2">
+                        Rahul <i class="fa-solid fa-times cursor-pointer hover:text-white"></i>
+                    </span>
+                </div>
+            </div>
+
+            <button @click="createGroupAction()" class="w-full mt-8 bg-gradient-to-r from-crimson to-darkRed py-3 rounded-lg font-semibold text-white shadow-lg shadow-crimson/25 hover:shadow-crimson/40 transition-all">
+                Create Group
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Expense Modal -->
+    <div x-show="modals.addExpense" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" x-transition.opacity>
+        <div class="glass-panel w-full max-w-md rounded-2xl p-8 relative" @click.away="modals.addExpense = false">
+            <button @click="modals.addExpense = false" class="absolute top-4 right-4 text-gray-500 hover:text-white"><i class="fa-solid fa-times"></i></button>
+            
+            <h3 class="text-2xl font-bold text-white mb-6">Add Expense</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Amount (ALGO)</label>
+                    <input type="number" placeholder="0.00" class="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white text-xl font-mono focus:border-crimson focus:outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Description</label>
+                    <input type="text" placeholder="e.g. Dinner at The Beach" class="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-crimson focus:outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Paid By</label>
+                    <select class="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-3 text-white focus:border-crimson focus:outline-none">
+                        <option>Deepak (You)</option>
+                        <option>Rahul</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Split Equally Among</label>
+                    <div class="flex gap-2">
+                        <label class="flex items-center gap-2 bg-white/5 px-3 py-2 rounded cursor-pointer hover:bg-white/10">
+                            <input type="checkbox" checked class="accent-crimson"> <span class="text-sm text-gray-300">You</span>
+                        </label>
+                        <label class="flex items-center gap-2 bg-white/5 px-3 py-2 rounded cursor-pointer hover:bg-white/10">
+                            <input type="checkbox" checked class="accent-crimson"> <span class="text-sm text-gray-300">Rahul</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button @click="addExpenseAction()" class="w-full mt-8 bg-gradient-to-r from-crimson to-darkRed py-3 rounded-lg font-semibold text-white shadow-lg shadow-crimson/25 hover:shadow-crimson/40 transition-all">
+                Add Expense
+            </button>
+        </div>
+    </div>
+
+    <!-- Transaction Success Modal -->
+    <div x-show="modals.success" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" x-transition.opacity>
+        <div class="text-center">
+            <div class="w-20 h-20 mx-auto bg-green-500/20 rounded-full flex items-center justify-center mb-6 relative">
+                <div class="absolute inset-0 border-4 border-green-500 rounded-full animate-ping opacity-20"></div>
+                <i class="fa-solid fa-check text-4xl text-green-500"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-white mb-2">Transaction Successful</h3>
+            <p class="text-gray-400 mb-8">Payment sent to blockchain.</p>
+            <button @click="modals.success = false" class="px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-colors">
+                Done
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function appData() {
+            return {
+                page: 'dashboard', // landing, dashboard, groups, settlements
+                walletConnected: false,
+                modals: {
+                    createGroup: false,
+                    addExpense: false,
+                    success: false
+                },
+                notification: {
+                    show: false,
+                    title: '',
+                    message: ''
+                },
+                features: [
+                    { title: 'Create Groups', desc: 'Set up expense groups instantly with friends or colleagues on-chain.', icon: 'fa-solid fa-users' },
+                    { title: 'Track Expenses', desc: 'Log transactions with descriptions and split logic automatically.', icon: 'fa-solid fa-list-check' },
+                    { title: 'Auto Settlement', desc: 'Smart contracts calculate the most efficient way to settle debts.', icon: 'fa-solid fa-calculator' },
+                    { title: 'Instant Pay', desc: 'One-click payments using Algorand Standard Assets (ASA).', icon: 'fa-solid fa-bolt' }
+                ],
+                groups: [
+                    { id: 1, name: 'Goa Trip 2024', members: ['Deepak', 'Rahul', 'Sarah'] },
+                    { id: 2, name: 'Office Lunch', members: ['Deepak', 'Mike'] },
+                    { id: 3, name: 'Hackathon Team', members: ['Deepak', 'Alex', 'Priya', 'John'] }
+                ],
+                activities: [
+                    { id: 1, type: 'expense', desc: 'Dinner at The Beach', time: '2 hours ago', amount: -15.5 },
+                    { id: 2, type: 'payment', desc: 'Settled up with Rahul', time: '1 day ago', amount: 50.0 },
+                    { id: 3, type: 'expense', desc: 'Uber Ride', time: '2 days ago', amount: -4.2 }
+                ],
+
+                connectWallet() {
+                    // Simulate Wallet Connection Delay
+                    const btn = document.querySelector('button[\\@click="connectWallet()"]');
+                    if(btn) {
+                        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Connecting...';
+                    }
+                    
+                    setTimeout(() => {
+                        this.walletConnected = true;
+                        this.page = 'dashboard';
+                        this.showNotification('Wallet Connected', 'Pera Wallet connected successfully.');
+                    }, 1500);
+                },
+
+                openModal(name) {
+                    this.modals[name] = true;
+                },
+
+                createGroupAction() {
+                    this.modals.createGroup = false;
+                    this.showNotification('Group Created', 'Goa Trip 2024 created on-chain.');
+                    // Add to mock data
+                    this.groups.unshift({ id: Date.now(), name: 'New Group', members: ['You'] });
+                },
+
+                addExpenseAction() {
+                    this.modals.addExpense = false;
+                    this.showNotification('Expense Added', 'Transaction recorded on blockchain.');
+                    // Add to mock activity
+                    this.activities.unshift({ id: Date.now(), type: 'expense', desc: 'New Expense', time: 'Just now', amount: -10.0 });
+                },
+
+                simulatePayment(to, amount) {
+                    // Simulate blockchain transaction delay
+                    setTimeout(() => {
+                        this.modals.success = true;
+                    }, 1000);
+                },
+
+                showNotification(title, message) {
+                    this.notification.title = title;
+                    this.notification.message = message;
+                    this.notification.show = true;
+                    setTimeout(() => {
+                        this.notification.show = false;
+                    }, 4000);
+                },
+
+                scrollToFeatures() {
+                    document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
